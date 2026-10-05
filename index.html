@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Face Mask Camera</title>
+  <title>Simple Camera + Timer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -16,82 +16,84 @@
       min-height: 100vh;
       padding: 16px;
     }
-    h1 { font-size: 1.4rem; margin-bottom: 12px; }
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+    }
     #container {
       position: relative;
       width: 100%;
       max-width: 400px;
       aspect-ratio: 3/4;
-      background: #000;
+      background: #222;
       border-radius: 16px;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
     video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: block;
     }
-    #overlay { pointer-events: none; }
+    canvas {
+      display: none;
+    }
     #controls {
       margin-top: 20px;
+      width: 100%;
+      max-width: 400px;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      width: 100%;
-      max-width: 400px;
     }
     .row {
       display: flex;
       gap: 10px;
-      justify-content: center;
     }
     button, select {
-      padding: 14px 20px;
+      padding: 14px 16px;
       font-size: 1rem;
       border: none;
       border-radius: 12px;
-      cursor: pointer;
       font-weight: 600;
+      flex: 1;
     }
     button {
       background: #3b82f6;
       color: white;
-      flex: 1;
+      cursor: pointer;
     }
     button:disabled {
       background: #555;
       cursor: not-allowed;
     }
-    button.danger { background: #ef4444; }
     select {
       background: #222;
       color: white;
       border: 1px solid #444;
+    }
+    #status {
+      margin-top: 16px;
+      text-align: center;
+      color: #aaa;
+      font-size: 0.95rem;
+      min-height: 24px;
     }
     #countdown {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 6rem;
+      font-size: 80px;
       font-weight: 800;
       color: white;
-      text-shadow: 0 0 20px rgba(0,0,0,0.8);
-      z-index: 10;
+      text-shadow: 0 0 20px black;
       display: none;
-    }
-    #status {
-      margin-top: 12px;
-      font-size: 0.9rem;
-      color: #aaa;
-      text-align: center;
+      z-index: 10;
     }
     #result {
       margin-top: 20px;
+      width: 100%;
       max-width: 400px;
       display: none;
     }
@@ -102,15 +104,16 @@
     #downloadBtn {
       margin-top: 12px;
       width: 100%;
+      background: #10b981;
     }
   </style>
 </head>
 <body>
-  <h1>Face Mask Camera</h1>
+  <h1>Simple Camera + Timer</h1>
 
   <div id="container">
     <video id="video" autoplay playsinline muted></video>
-    <canvas id="overlay"></canvas>
+    <canvas id="canvas"></canvas>
     <div id="countdown">3</div>
   </div>
 
@@ -129,118 +132,56 @@
     </div>
   </div>
 
-  <div id="status">Click "Start Camera" to begin</div>
+  <div id="status">Click "Start Camera"</div>
 
   <div id="result">
     <img id="resultImg" />
     <button id="downloadBtn">Download Photo</button>
   </div>
 
-  <script type="module">
-    import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
-
-    const { FaceLandmarker, FilesetResolver, DrawingUtils } = vision;
-
+  <script>
     const video = document.getElementById("video");
-    const canvas = document.getElementById("overlay");
+    const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
-    const countdownEl = document.getElementById("countdown");
-    const statusEl = document.getElementById("status");
     const startBtn = document.getElementById("startBtn");
     const captureBtn = document.getElementById("captureBtn");
     const timerSelect = document.getElementById("timerSelect");
+    const statusEl = document.getElementById("status");
+    const countdownEl = document.getElementById("countdown");
     const resultDiv = document.getElementById("result");
     const resultImg = document.getElementById("resultImg");
     const downloadBtn = document.getElementById("downloadBtn");
 
-    let faceLandmarker = null;
     let stream = null;
-    let animationId = null;
     let isCapturing = false;
 
-    async function initFaceLandmarker() {
-      statusEl.textContent = "Loading face detection model...";
-      const filesetResolver = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-      );
-      faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        numFaces: 1
-      });
-      statusEl.textContent = "Model ready";
-    }
-
-    async function startCamera() {
+    startBtn.addEventListener("click", async () => {
       try {
+        statusEl.textContent = "Requesting camera permission...";
+        
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 960 } },
+          video: {
+            facingMode: "user",
+            width: { ideal: 720 },
+            height: { ideal: 1280 }
+          },
           audio: false
         });
+
         video.srcObject = stream;
         await video.play();
 
-        // Set canvas size to match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
         startBtn.disabled = true;
         captureBtn.disabled = false;
-        statusEl.textContent = "Camera ready – pose and press Take Photo";
-
-        detectLoop();
+        statusEl.textContent = "Camera is ready. Choose timer and press Take Photo.";
       } catch (err) {
-        statusEl.textContent = "Camera error: " + err.message;
         console.error(err);
+        statusEl.textContent = "Error: " + err.message;
+        alert("Camera error: " + err.message);
       }
-    }
+    });
 
-    function detectLoop() {
-      if (!faceLandmarker || video.readyState < 2) {
-        animationId = requestAnimationFrame(detectLoop);
-        return;
-      }
-
-      const results = faceLandmarker.detectForVideo(video, performance.now());
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw the video frame first
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-        const landmarks = results.faceLandmarks[0];
-
-        // Get face oval points (MediaPipe face oval indices)
-        // We'll use a simple method: find min/max of all landmarks to create a covering oval
-        let minX = 1, maxX = 0, minY = 1, maxY = 0;
-        for (const point of landmarks) {
-          if (point.x < minX) minX = point.x;
-          if (point.x > maxX) maxX = point.x;
-          if (point.y < minY) minY = point.y;
-          if (point.y > maxY) maxY = point.y;
-        }
-
-        const centerX = ((minX + maxX) / 2) * canvas.width;
-        const centerY = ((minY + maxY) / 2) * canvas.height;
-        const radiusX = ((maxX - minX) / 2) * canvas.width * 1.15; // a bit larger to fully cover
-        const radiusY = ((maxY - minY) / 2) * canvas.height * 1.25;
-
-        // Draw solid black oval mask
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "#000000";
-        ctx.fill();
-      }
-
-      animationId = requestAnimationFrame(detectLoop);
-    }
-
-    function startCountdown() {
+    captureBtn.addEventListener("click", () => {
       if (isCapturing) return;
       isCapturing = true;
       captureBtn.disabled = true;
@@ -249,43 +190,44 @@
       countdownEl.style.display = "block";
       countdownEl.textContent = seconds;
 
-      const interval = setInterval(() => {
+      const timer = setInterval(() => {
         seconds--;
         if (seconds > 0) {
           countdownEl.textContent = seconds;
         } else {
-          clearInterval(interval);
+          clearInterval(timer);
           countdownEl.style.display = "none";
           takePhoto();
         }
       }, 1000);
-    }
+    });
 
     function takePhoto() {
-      // The canvas already has the video + black mask drawn
+      // Set canvas size to video size
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Draw current video frame
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Show result
       const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
       resultImg.src = dataUrl;
       resultDiv.style.display = "block";
       statusEl.textContent = "Photo captured!";
+
       isCapturing = false;
       captureBtn.disabled = false;
 
-      // Scroll to result
       resultDiv.scrollIntoView({ behavior: "smooth" });
     }
 
     downloadBtn.addEventListener("click", () => {
       const link = document.createElement("a");
-      link.download = `masked-photo-${Date.now()}.jpg`;
+      link.download = `photo-${Date.now()}.jpg`;
       link.href = resultImg.src;
       link.click();
     });
-
-    startBtn.addEventListener("click", startCamera);
-    captureBtn.addEventListener("click", startCountdown);
-
-    // Initialize model on load
-    initFaceLandmarker();
   </script>
 </body>
 </html>
