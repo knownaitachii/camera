@@ -2,294 +2,606 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Face Mask Camera</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Spiderman Mask Camera</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #111;
-      color: white;
-      font-family: system-ui, -apple-system, sans-serif;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #fff;
+    }
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
-      padding: 16px;
+      justify-content: center;
     }
-    h1 { font-size: 1.3rem; margin-bottom: 12px; }
-    #container {
+    #camera-container {
       position: relative;
       width: 100%;
-      max-width: 400px;
-      aspect-ratio: 3/4;
-      background: #222;
-      border-radius: 16px;
+      height: 100%;
       overflow: hidden;
+      background: #111;
     }
-    video, canvas {
+    #video {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transform: scaleX(-1); /* mirror like Snapchat / native selfie */
     }
-    #controls {
-      margin-top: 18px;
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
-      max-width: 400px;
+      height: 100%;
+      pointer-events: none;
+      transform: scaleX(-1); /* keep overlay mirrored with video */
+    }
+    #ui {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      gap: 16px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.55));
+      z-index: 10;
     }
-    .row {
+    #shutter {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      border: 5px solid #fff;
+      background: rgba(255,255,255,0.15);
+      cursor: pointer;
       display: flex;
-      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.12s ease, background 0.12s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
-    button, select {
-      padding: 14px 16px;
-      font-size: 1rem;
-      border: none;
-      border-radius: 12px;
-      font-weight: 600;
-      flex: 1;
+    #shutter::after {
+      content: "";
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.12s ease;
     }
-    button {
-      background: #3b82f6;
-      color: white;
+    #shutter:active {
+      transform: scale(0.92);
     }
-    button:disabled {
-      background: #555;
+    #shutter:active::after {
+      transform: scale(0.88);
     }
-    select {
-      background: #222;
-      color: white;
-      border: 1px solid #444;
+    #shutter.capturing::after {
+      background: #ff3b30;
     }
     #status {
-      margin-top: 14px;
+      font-size: 13px;
+      opacity: 0.85;
       text-align: center;
-      color: #aaa;
-      font-size: 0.95rem;
-      min-height: 24px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+      min-height: 18px;
     }
-    #countdown {
+    #preview-modal {
+      display: none;
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 80px;
-      font-weight: 800;
-      color: white;
-      text-shadow: 0 0 20px black;
-      display: none;
+      inset: 0;
+      background: #000;
       z-index: 20;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
-    #result {
+    #preview-modal.show {
+      display: flex;
+    }
+    #preview-img {
+      max-width: 100%;
+      max-height: 75%;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+    #preview-actions {
       margin-top: 20px;
-      width: 100%;
-      max-width: 400px;
+      display: flex;
+      gap: 16px;
+    }
+    .btn {
+      padding: 12px 28px;
+      border-radius: 999px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #fff;
+      color: #000;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+    }
+    #permission {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #0a0a0a;
+      z-index: 30;
+      padding: 24px;
+      text-align: center;
+    }
+    #permission.hidden {
       display: none;
     }
-    #result img {
-      width: 100%;
-      border-radius: 12px;
+    #permission h1 {
+      font-size: 22px;
+      font-weight: 700;
     }
-    #downloadBtn {
+    #permission p {
+      font-size: 15px;
+      opacity: 0.7;
+      max-width: 280px;
+      line-height: 1.4;
+    }
+    #start-btn {
       margin-top: 12px;
-      width: 100%;
-      background: #10b981;
+      padding: 14px 36px;
+      border-radius: 999px;
+      border: none;
+      background: #fff;
+      color: #000;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.7);
+      z-index: 15;
+      font-size: 15px;
+    }
+    #loading.show {
+      display: flex;
     }
   </style>
 </head>
 <body>
-  <h1>Face Mask Camera</h1>
-
-  <div id="container">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-    <div id="countdown">3</div>
-  </div>
-
-  <div id="controls">
-    <div class="row">
-      <select id="timerSelect">
-        <option value="3">3 seconds</option>
-        <option value="5" selected>5 seconds</option>
-        <option value="10">10 seconds</option>
-      </select>
+  <div id="app">
+    <div id="permission">
+      <h1>Spiderman Mask Cam</h1>
+      <p>Allow camera access to try the live Spiderman face filter (works best on front camera).</p>
+      <button id="start-btn">Open Camera</button>
     </div>
-    <div class="row">
-      <button id="startBtn">Start Camera</button>
-      <button id="captureBtn" disabled>Take Photo</button>
+
+    <div id="camera-container">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="loading">Loading face model…</div>
     </div>
-  </div>
 
-  <div id="status">Click "Start Camera"</div>
+    <div id="ui">
+      <div id="status">Point your face at the camera</div>
+      <button id="shutter" aria-label="Take photo"></button>
+    </div>
 
-  <div id="result">
-    <img id="resultImg" />
-    <button id="downloadBtn">Download Photo</button>
+    <div id="preview-modal">
+      <img id="preview-img" alt="Captured photo" />
+      <div id="preview-actions">
+        <button class="btn btn-secondary" id="retake-btn">Retake</button>
+        <button class="btn btn-primary" id="download-btn">Save</button>
+      </div>
+    </div>
   </div>
 
   <script type="module">
+    import {
+      FaceLandmarker,
+      FilesetResolver,
+      DrawingUtils
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
+
     const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
+    const canvas = document.getElementById("overlay");
     const ctx = canvas.getContext("2d");
-    const startBtn = document.getElementById("startBtn");
-    const captureBtn = document.getElementById("captureBtn");
-    const timerSelect = document.getElementById("timerSelect");
+    const shutter = document.getElementById("shutter");
     const statusEl = document.getElementById("status");
-    const countdownEl = document.getElementById("countdown");
-    const resultDiv = document.getElementById("result");
-    const resultImg = document.getElementById("resultImg");
-    const downloadBtn = document.getElementById("downloadBtn");
+    const permissionEl = document.getElementById("permission");
+    const startBtn = document.getElementById("start-btn");
+    const loadingEl = document.getElementById("loading");
+    const previewModal = document.getElementById("preview-modal");
+    const previewImg = document.getElementById("preview-img");
+    const retakeBtn = document.getElementById("retake-btn");
+    const downloadBtn = document.getElementById("download-btn");
 
-    let stream = null;
     let faceLandmarker = null;
-    let animationId = null;
-    let isCapturing = false;
-    let lastFace = null;
+    let lastVideoTime = -1;
+    let animId = null;
+    let stream = null;
+    let capturedDataUrl = null;
 
-    // Load MediaPipe
-    async function loadFaceModel() {
-      try {
-        statusEl.textContent = "Loading face detection...";
-        const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm");
-        const { FaceLandmarker, FilesetResolver } = vision;
+    // MediaPipe face landmark indices (key points)
+    const LM = {
+      // Face oval / outline
+      forehead: 10,
+      chin: 152,
+      leftCheek: 234,
+      rightCheek: 454,
+      // Eyes
+      leftEyeOuter: 33,
+      leftEyeInner: 133,
+      rightEyeOuter: 263,
+      rightEyeInner: 362,
+      leftEyeTop: 159,
+      leftEyeBottom: 145,
+      rightEyeTop: 386,
+      rightEyeBottom: 374,
+      // Nose
+      noseTip: 1,
+      noseBridge: 6,
+      // Mouth
+      upperLip: 13,
+      lowerLip: 14,
+      mouthLeft: 61,
+      mouthRight: 291,
+      // More outline points for mask shape
+      leftTemple: 127,
+      rightTemple: 356,
+      leftJaw: 172,
+      rightJaw: 397,
+      browLeft: 70,
+      browRight: 300
+    };
 
-        const filesetResolver = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-
-        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-          baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numFaces: 1
-        });
-
-        statusEl.textContent = "Face detection ready";
-      } catch (err) {
-        console.error("Face model failed:", err);
-        statusEl.textContent = "Face detection failed - will use simple center mask";
-        faceLandmarker = null;
-      }
+    async function createFaceLandmarker() {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
+      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+          delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+        outputFaceBlendshapes: false,
+        outputFacialTransformationMatrixes: false
+      });
     }
 
-    // Start Camera
-    startBtn.addEventListener("click", async () => {
+    async function startCamera() {
+      loadingEl.classList.add("show");
+      statusEl.textContent = "Starting camera…";
+
+      // Native-like constraints (front camera, reasonable resolution)
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        }
+      };
+
       try {
-        statusEl.textContent = "Requesting camera...";
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 1280 } },
-          audio: false
-        });
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
         await video.play();
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Wait for metadata so we know size
+        await new Promise((resolve) => {
+          if (video.readyState >= 2) resolve();
+          else video.onloadedmetadata = resolve;
+        });
 
-        startBtn.disabled = true;
-        captureBtn.disabled = false;
-        statusEl.textContent = "Camera ready. Pose and press Take Photo.";
+        resizeCanvas();
+        permissionEl.classList.add("hidden");
+        statusEl.textContent = "Loading face model…";
 
-        // Start drawing loop
-        drawLoop();
+        if (!faceLandmarker) {
+          await createFaceLandmarker();
+        }
+
+        loadingEl.classList.remove("show");
+        statusEl.textContent = "Spiderman mask active";
+        predictLoop();
       } catch (err) {
-        statusEl.textContent = "Camera error: " + err.message;
-        alert(err.message);
+        console.error(err);
+        loadingEl.classList.remove("show");
+        statusEl.textContent = "Camera error – check permissions";
+        alert("Could not access camera. Please allow camera permission and try again.\n\n" + (err.message || err));
       }
-    });
-
-    // Drawing loop (video + mask)
-    function drawLoop() {
-      if (video.readyState >= 2) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        if (faceLandmarker) {
-          const results = faceLandmarker.detectForVideo(video, performance.now());
-          if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-            const landmarks = results.faceLandmarks[0];
-            let minX = 1, maxX = 0, minY = 1, maxY = 0;
-            for (const p of landmarks) {
-              if (p.x < minX) minX = p.x;
-              if (p.x > maxX) maxX = p.x;
-              if (p.y < minY) minY = p.y;
-              if (p.y > maxY) maxY = p.y;
-            }
-            lastFace = { minX, maxX, minY, maxY };
-          }
-        }
-
-        // Draw mask
-        if (lastFace) {
-          const centerX = ((lastFace.minX + lastFace.maxX) / 2) * canvas.width;
-          const centerY = ((lastFace.minY + lastFace.maxY) / 2) * canvas.height;
-          const radiusX = ((lastFace.maxX - lastFace.minX) / 2) * canvas.width * 1.25;
-          const radiusY = ((lastFace.maxY - lastFace.minY) / 2) * canvas.height * 1.35;
-
-          ctx.beginPath();
-          ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-          ctx.fillStyle = "#000";
-          ctx.fill();
-        } else {
-          // Fallback: simple center mask if no face detected
-          const cx = canvas.width / 2;
-          const cy = canvas.height * 0.42;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, canvas.width * 0.28, canvas.height * 0.22, 0, 0, Math.PI * 2);
-          ctx.fillStyle = "#000";
-          ctx.fill();
-        }
-      }
-      animationId = requestAnimationFrame(drawLoop);
     }
 
-    // Timer + Capture
-    captureBtn.addEventListener("click", () => {
-      if (isCapturing) return;
-      isCapturing = true;
-      captureBtn.disabled = true;
-
-      let seconds = parseInt(timerSelect.value);
-      countdownEl.style.display = "block";
-      countdownEl.textContent = seconds;
-
-      const timer = setInterval(() => {
-        seconds--;
-        if (seconds > 0) {
-          countdownEl.textContent = seconds;
-        } else {
-          clearInterval(timer);
-          countdownEl.style.display = "none";
-          takePhoto();
-        }
-      }, 1000);
-    });
-
-    function takePhoto() {
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-      resultImg.src = dataUrl;
-      resultDiv.style.display = "block";
-      statusEl.textContent = "Photo captured with mask!";
-      isCapturing = false;
-      captureBtn.disabled = false;
-      resultDiv.scrollIntoView({ behavior: "smooth" });
+    function resizeCanvas() {
+      const w = video.videoWidth || window.innerWidth;
+      const h = video.videoHeight || window.innerHeight;
+      canvas.width = w;
+      canvas.height = h;
+      // CSS already stretches to cover; internal resolution matches video
     }
 
-    downloadBtn.addEventListener("click", () => {
+    window.addEventListener("resize", () => {
+      if (video.videoWidth) resizeCanvas();
+    });
+
+    function getPoint(landmarks, idx, w, h) {
+      const p = landmarks[idx];
+      return { x: p.x * w, y: p.y * h };
+    }
+
+    function drawSpidermanMask(landmarks, w, h) {
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+
+      // Helper
+      const p = (idx) => getPoint(landmarks, idx, w, h);
+
+      // Key points
+      const forehead = p(LM.forehead);
+      const chin = p(LM.chin);
+      const leftCheek = p(LM.leftCheek);
+      const rightCheek = p(LM.rightCheek);
+      const leftTemple = p(LM.leftTemple);
+      const rightTemple = p(LM.rightTemple);
+      const leftJaw = p(LM.leftJaw);
+      const rightJaw = p(LM.rightJaw);
+      const noseTip = p(LM.noseTip);
+      const noseBridge = p(LM.noseBridge);
+
+      // Approximate face center and size
+      const centerX = (leftCheek.x + rightCheek.x) / 2;
+      const centerY = (forehead.y + chin.y) / 2;
+      const faceW = Math.hypot(rightCheek.x - leftCheek.x, rightCheek.y - leftCheek.y) * 1.15;
+      const faceH = Math.hypot(chin.x - forehead.x, chin.y - forehead.y) * 1.25;
+
+      // --- Mask body (red) ---
+      // Use a smoothed face oval that covers the whole face like a mask
+      const ovalPoints = [
+        10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+        397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+        172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109
+      ];
+
+      ctx.beginPath();
+      const first = p(ovalPoints[0]);
+      // Expand slightly outward so the mask fully covers the face
+      const expand = 1.08;
+      ctx.moveTo(
+        centerX + (first.x - centerX) * expand,
+        centerY + (first.y - centerY) * expand
+      );
+      for (let i = 1; i < ovalPoints.length; i++) {
+        const pt = p(ovalPoints[i]);
+        ctx.lineTo(
+          centerX + (pt.x - centerX) * expand,
+          centerY + (pt.y - centerY) * expand
+        );
+      }
+      ctx.closePath();
+
+      // Red fill
+      ctx.fillStyle = "#E31C23";
+      ctx.fill();
+
+      // Subtle darker gradient near edges for depth
+      const grad = ctx.createRadialGradient(centerX, centerY - faceH * 0.1, faceW * 0.2, centerX, centerY, faceW * 0.7);
+      grad.addColorStop(0, "rgba(227,28,35,0)");
+      grad.addColorStop(1, "rgba(120,10,15,0.35)");
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // --- Black web pattern ---
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = Math.max(1.5, faceW * 0.012);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      // Radial lines from near nose bridge / forehead center
+      const webCenter = {
+        x: (noseBridge.x + forehead.x) / 2,
+        y: forehead.y + faceH * 0.12
+      };
+
+      const numRays = 10;
+      for (let i = 0; i < numRays; i++) {
+        const angle = (i / numRays) * Math.PI * 2 - Math.PI / 2;
+        const len = faceW * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(webCenter.x, webCenter.y);
+        ctx.lineTo(
+          webCenter.x + Math.cos(angle) * len,
+          webCenter.y + Math.sin(angle) * len
+        );
+        ctx.stroke();
+      }
+
+      // Concentric arcs / rings
+      for (let r = 0.18; r <= 0.55; r += 0.12) {
+        ctx.beginPath();
+        ctx.ellipse(
+          webCenter.x,
+          webCenter.y,
+          faceW * r,
+          faceH * r * 0.95,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+      }
+
+      // Extra connecting web lines for classic look
+      ctx.beginPath();
+      // Horizontal-ish lines across cheeks
+      ctx.moveTo(leftTemple.x, leftTemple.y + faceH * 0.05);
+      ctx.quadraticCurveTo(centerX, centerY - faceH * 0.05, rightTemple.x, rightTemple.y + faceH * 0.05);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(leftCheek.x, leftCheek.y);
+      ctx.quadraticCurveTo(centerX, centerY + faceH * 0.1, rightCheek.x, rightCheek.y);
+      ctx.stroke();
+
+      // --- Large Spiderman eyes ---
+      const leftEyeOuter = p(LM.leftEyeOuter);
+      const leftEyeInner = p(LM.leftEyeInner);
+      const leftEyeTop = p(LM.leftEyeTop);
+      const leftEyeBottom = p(LM.leftEyeBottom);
+      const rightEyeOuter = p(LM.rightEyeOuter);
+      const rightEyeInner = p(LM.rightEyeInner);
+      const rightEyeTop = p(LM.rightEyeTop);
+      const rightEyeBottom = p(LM.rightEyeBottom);
+
+      // Eye centers and sizes (make them larger than real eyes for the classic look)
+      const leftEyeCx = (leftEyeOuter.x + leftEyeInner.x) / 2;
+      const leftEyeCy = (leftEyeTop.y + leftEyeBottom.y) / 2;
+      const rightEyeCx = (rightEyeOuter.x + rightEyeInner.x) / 2;
+      const rightEyeCy = (rightEyeTop.y + rightEyeBottom.y) / 2;
+
+      const eyeW = faceW * 0.28;
+      const eyeH = faceH * 0.18;
+
+      // Helper to draw one eye shape (almond / lens)
+      function drawEye(cx, cy, flip) {
+        ctx.beginPath();
+        // Classic Spiderman eye: large, slightly angled, rounded diamond/almond
+        const topY = cy - eyeH * 0.55;
+        const botY = cy + eyeH * 0.55;
+        const outerX = cx + (flip ? eyeW * 0.55 : -eyeW * 0.55);
+        const innerX = cx + (flip ? -eyeW * 0.35 : eyeW * 0.35);
+
+        ctx.moveTo(outerX, cy);
+        ctx.quadraticCurveTo(cx, topY - eyeH * 0.15, innerX, topY + eyeH * 0.1);
+        ctx.quadraticCurveTo(cx + (flip ? -eyeW * 0.1 : eyeW * 0.1), botY, outerX, cy);
+        ctx.closePath();
+
+        // White fill
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fill();
+
+        // Thick black outline
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = Math.max(3, faceW * 0.018);
+        ctx.stroke();
+      }
+
+      drawEye(leftEyeCx, leftEyeCy, false);
+      drawEye(rightEyeCx, rightEyeCy, true);
+
+      // Small highlight on eyes for gloss
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.beginPath();
+      ctx.ellipse(leftEyeCx - eyeW * 0.12, leftEyeCy - eyeH * 0.15, eyeW * 0.08, eyeH * 0.06, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(rightEyeCx + eyeW * 0.12, rightEyeCy - eyeH * 0.15, eyeW * 0.08, eyeH * 0.06, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function predictLoop() {
+      if (!faceLandmarker || !video.videoWidth) {
+        animId = requestAnimationFrame(predictLoop);
+        return;
+      }
+
+      const now = performance.now();
+      if (video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
+        const results = faceLandmarker.detectForVideo(video, now);
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+          drawSpidermanMask(results.faceLandmarks[0], w, h);
+          statusEl.textContent = "Spiderman mask active";
+        } else {
+          ctx.clearRect(0, 0, w, h);
+          statusEl.textContent = "Looking for your face…";
+        }
+      }
+      animId = requestAnimationFrame(predictLoop);
+    }
+
+    function capturePhoto() {
+      if (!video.videoWidth) return;
+
+      shutter.classList.add("capturing");
+      setTimeout(() => shutter.classList.remove("capturing"), 180);
+
+      // Composite video + overlay into one image
+      const snap = document.createElement("canvas");
+      snap.width = video.videoWidth;
+      snap.height = video.videoHeight;
+      const sctx = snap.getContext("2d");
+
+      // Mirror the final image so it matches what the user sees
+      sctx.translate(snap.width, 0);
+      sctx.scale(-1, 1);
+
+      sctx.drawImage(video, 0, 0);
+      sctx.drawImage(canvas, 0, 0);
+
+      capturedDataUrl = snap.toDataURL("image/jpeg", 0.92);
+      previewImg.src = capturedDataUrl;
+      previewModal.classList.add("show");
+    }
+
+    function closePreview() {
+      previewModal.classList.remove("show");
+      capturedDataUrl = null;
+    }
+
+    function downloadPhoto() {
+      if (!capturedDataUrl) return;
       const a = document.createElement("a");
-      a.download = `masked-${Date.now()}.jpg`;
-      a.href = resultImg.src;
+      a.href = capturedDataUrl;
+      a.download = `spiderman-mask-${Date.now()}.jpg`;
       a.click();
-    });
+    }
 
-    // Load model when page opens
-    loadFaceModel();
+    // Event listeners
+    startBtn.addEventListener("click", startCamera);
+    shutter.addEventListener("click", capturePhoto);
+    retakeBtn.addEventListener("click", closePreview);
+    downloadBtn.addEventListener("click", downloadPhoto);
+
+    // Auto-start if permission already granted (optional nicety)
+    // We keep the explicit button for first-time clarity.
   </script>
 </body>
 </html>
